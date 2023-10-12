@@ -1,0 +1,97 @@
+version: "3"
+
+services:
+
+  kafka:
+    image: bitnami/kafka:3.5.1
+    container_name: kafka
+    networks:
+      - kafka-network
+    restart: "unless-stopped"
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      # KRaft settings
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      # Listeners
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop:3.31.0
+    container_name: kafdrop
+    networks:
+      - kafka-network
+    depends_on:
+      - kafka
+    ports:
+      - 9000:9000
+    restart: "unless-stopped"
+    environment:
+      KAFKA_BROKERCONNECT: kafka:9092
+
+  publisher:
+    container_name: publisher
+    build:
+      context: ./publisher
+      dockerfile: Dockerfile
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PYTHONUNBUFFERED: 1
+    ports:
+      - 10000:80
+    volumes:
+      - ./.data/leveldb:/leveldb
+      - ./.data/fst:/fst
+    restart: "unless-stopped"
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+  consumer1:
+    container_name: consumer1
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PYTHONUNBUFFERED: 1
+    ports:
+      - 10001:10001
+    volumes:
+      - ./.data/leveldb:/leveldb
+    restart: "unless-stopped"
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+
+  consumer2:
+    container_name: consumer2
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PYTHONUNBUFFERED: 1
+    ports:
+      - 10002:10002
+    volumes:
+      - ./.data/leveldb:/leveldb
+    restart: "unless-stopped"
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+networks:
+  kafka-network:
+    driver: bridge
