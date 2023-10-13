@@ -1,4 +1,5 @@
 version: "3"
+name: myapp
 
 services:
 
@@ -13,6 +14,7 @@ services:
       - "9101:9101"
     environment:
       # KRaft settings
+      KAFKA_ENABLE_KRAFT: 'yes'
       KAFKA_CFG_NODE_ID: 0
       KAFKA_CFG_PROCESS_ROLES: controller,broker
       KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
@@ -22,6 +24,28 @@ services:
       KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+  init-kafka:
+    image: bitnami/kafka:3.5.1
+    container_name: init-kafka
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # blocks until kafka is reachable
+      kafka-topics.sh --bootstrap-server kafka:9092 --list
+
+      echo -e 'Creating kafka topics'
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --topic postgres.member.address  --partitions 10
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --topic postgres.member.name  --partitions 10
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --topic myapp.fields  --partitions 10
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics.sh --bootstrap-server kafka:9092 --list
+      "
 
   kafdrop:
     image: obsidiandynamics/kafdrop:3.31.0
@@ -36,59 +60,84 @@ services:
     environment:
       KAFKA_BROKERCONNECT: kafka:9092
 
-  publisher:
-    container_name: publisher
+  myapp:
+    container_name: myapp
     build:
-      context: ./publisher
+      context: ./myapp
       dockerfile: Dockerfile
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       PYTHONUNBUFFERED: 1
     ports:
       - 10000:80
-    volumes:
-      - ./.data/leveldb:/leveldb
-      - ./.data/fst:/fst
     restart: "unless-stopped"
     depends_on:
-      - kafka
+      init-kafka:
+        condition: service_completed_successfully
     networks:
       - kafka-network
 
-  consumer1:
-    container_name: consumer1
+  etl:
+    # container_name: etl
     build:
-      context: ./consumer
+      context: ./myapp-etl
       dockerfile: Dockerfile
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       PYTHONUNBUFFERED: 1
-    ports:
-      - 10001:10001
-    volumes:
-      - ./.data/leveldb:/leveldb
     restart: "unless-stopped"
     depends_on:
-      - kafka
+      init-kafka:
+        condition: service_completed_successfully
+    networks:
+      - kafka-network
+  
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    command: ['postgres', '-c', 'wal_level=logical']
+    volumes:
+      - ./data/initialize-postgres.sql:/docker-entrypoint-initdb.d/initialize-postgres.sql
     networks:
       - kafka-network
 
-
-  consumer2:
-    container_name: consumer2
-    build:
-      context: ./consumer
-      dockerfile: Dockerfile
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      PYTHONUNBUFFERED: 1
+  debezium:
+    image: debezium/connect:latest
+    container_name: debezium
+    hostname: debezium
     ports:
-      - 10002:10002
-    volumes:
-      - ./.data/leveldb:/leveldb
-    restart: "unless-stopped"
+      - 9090:8083
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: pg
+      CONFIG_STORAGE_TOPIC: debezium_configs
+      STATUS_STORAGE_TOPIC: debezium_statuses
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      ENABLE_DEBEZIUM_SCRIPTING: "true"
     depends_on:
       - kafka
+      - postgres
+    networks:
+      - kafka-network
+
+  debezium-ui:
+    image: debezium/debezium-ui:latest
+    restart: unless-stopped
+    container_name: debezium-ui
+    hostname: debezium-ui
+    depends_on:
+      - debezium
+    ports:
+      - "9001:8080"
+    environment:
+      KAFKA_CONNECT_URIS: http://debezium:8083
     networks:
       - kafka-network
 

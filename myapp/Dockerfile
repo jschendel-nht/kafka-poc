@@ -39,6 +39,9 @@ RUN apt-get update && apt-get -y upgrade \
 # copy virtual environment, static directory, and cyclops codebase
 COPY --from=poetry ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 
+# create folders needed for leveldb and fst data
+RUN mkdir /leveldb /fst
+
 # ======================================================================================================================
 # application image - no dev dependencies
 # ======================================================================================================================
@@ -47,10 +50,10 @@ FROM runtime AS application
 WORKDIR /app
 
 # copy the codebase
-COPY ./consumer ./consumer
+COPY ./myapp ./myapp
 
-# run the consumer
-CMD ["python", "-m", "consumer"]
+# run the uvicorn server
+CMD ["uvicorn", "myapp.main:app", "--host", "0.0.0.0", "--port", "80"]
 
 # ======================================================================================================================
 # development image - includes extra dev dependencies
@@ -89,4 +92,3 @@ CMD ["python", "-m", "consumer"]
 # # run the uvicorn server
 # CMD ["uvicorn", "cyclops.main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
 #
-

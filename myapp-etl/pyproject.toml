@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "publisher"
+name = "myapp-etl"
 version = "0.1.0"
 description = ""
 authors = ["Jeremy Schendel <jschendel@nexthealthtechnologies.com>"]
@@ -7,15 +7,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-fastapi = "^0.103.2"
-uvicorn = "^0.23.2"
 kafka-python = "^2.0.2"
-aiokafka = "^0.8.1"
-plyvel-ci = "^1.5.0"
-rust-fst = "^0.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.2"
+ipython = "^8.16.1"
 
 [build-system]
 requires = ["poetry-core"]

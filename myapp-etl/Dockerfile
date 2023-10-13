@@ -47,10 +47,10 @@ FROM runtime AS application
 WORKDIR /app
 
 # copy the codebase
-COPY ./publisher ./publisher
+COPY ./myapp_etl ./myapp_etl
 
-# run the uvicorn server
-CMD ["uvicorn", "publisher.main:app", "--host", "0.0.0.0", "--port", "80"]
+# run the main script
+ENTRYPOINT ["python", "-m", "myapp_etl.main"]
 
 # ======================================================================================================================
 # development image - includes extra dev dependencies
@@ -89,3 +89,4 @@ CMD ["uvicorn", "publisher.main:app", "--host", "0.0.0.0", "--port", "80"]
 # # run the uvicorn server
 # CMD ["uvicorn", "cyclops.main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
 #
+
