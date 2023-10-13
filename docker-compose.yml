@@ -5,7 +5,6 @@ services:
 
   kafka:
     image: bitnami/kafka:3.5.1
-    container_name: kafka
     networks:
       - kafka-network
     restart: "unless-stopped"
@@ -27,7 +26,6 @@ services:
 
   init-kafka:
     image: bitnami/kafka:3.5.1
-    container_name: init-kafka
     depends_on:
       - kafka
     networks:
@@ -49,19 +47,19 @@ services:
 
   kafdrop:
     image: obsidiandynamics/kafdrop:3.31.0
-    container_name: kafdrop
+    # container_name: kafdrop
     networks:
       - kafka-network
     depends_on:
-      - kafka
+      init-kafka:
+        condition: service_completed_successfully
     ports:
       - 9000:9000
     restart: "unless-stopped"
     environment:
       KAFKA_BROKERCONNECT: kafka:9092
 
-  myapp:
-    container_name: myapp
+  app:
     build:
       context: ./myapp
       dockerfile: Dockerfile
@@ -78,7 +76,6 @@ services:
       - kafka-network
 
   etl:
-    # container_name: etl
     build:
       context: ./myapp-etl
       dockerfile: Dockerfile
@@ -94,7 +91,6 @@ services:
   
   postgres:
     image: postgres:latest
-    container_name: postgres
     ports:
       - 5432:5432
     environment:
@@ -108,7 +104,6 @@ services:
 
   debezium:
     image: debezium/connect:latest
-    container_name: debezium
     hostname: debezium
     ports:
       - 9090:8083
@@ -122,15 +117,16 @@ services:
       VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       ENABLE_DEBEZIUM_SCRIPTING: "true"
     depends_on:
-      - kafka
-      - postgres
+      init-kafka:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
     networks:
       - kafka-network
 
   debezium-ui:
     image: debezium/debezium-ui:latest
     restart: unless-stopped
-    container_name: debezium-ui
     hostname: debezium-ui
     depends_on:
       - debezium
